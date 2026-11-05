@@ -23,34 +23,51 @@
       <section class="field">
         <div class="label-row">
           <h2>① 대화 내용 <em class="req">필수</em></h2>
-          <button type="button" id="btnSample" class="btn ghost">예시 불러오기</button>
+          <select id="sampleSelect" class="sample-select" aria-label="예시 불러오기"></select>
         </div>
+        <p id="sampleNote" class="sample-note" hidden></p>
         <textarea id="text" rows="7" placeholder="상대방이 보낸 말을 그대로 붙여넣어 주세요"></textarea>
       </section>
 
       <section class="field">
         <h2>② 상황 체크 <em class="req">필수</em></h2>
         <fieldset>
-          <legend>Q1. 어디서 들은 말인가요?</legend>
-          <label class="opt"><input type="radio" name="place" value="public"><span>공개 채팅·게시글·댓글</span></label>
-          <label class="opt"><input type="radio" name="place" value="group"><span>파티·단톡 등 소수가 있는 채팅</span></label>
+          <legend>Q1. 그 말을 몇 명이 볼 수 있었나요?</legend>
+          <label class="opt"><input type="radio" name="place" value="public"><span>공개 채팅·게시글·댓글 (불특정 다수)</span></label>
+          <label class="opt"><input type="radio" name="place" value="group"><span>파티·팀 채팅·단톡 (3명 이상)</span></label>
           <label class="opt"><input type="radio" name="place" value="dm"><span>1:1 귓속말·DM</span></label>
         </fieldset>
         <fieldset>
-          <legend>Q2. 그 말이 나를 향한 거라는 걸 다른 사람도 알 수 있었나요?</legend>
-          <label class="opt"><input type="radio" name="target" value="direct"><span>내 닉네임이나 이름을 직접 불렀다</span></label>
-          <label class="opt"><input type="radio" name="target" value="context"><span>대화 흐름상 나라는 걸 알 수 있었다</span></label>
-          <label class="opt"><input type="radio" name="target" value="unsure"><span>잘 모르겠다</span></label>
+          <legend>Q2. 그 자리에서 내가 '실제로 누구인지' 아는 사람이 있었나요?</legend>
+          <label class="opt"><input type="radio" name="identity" value="real"><span>실명·학교·얼굴·SNS 등 현실 정보가 언급됐다</span></label>
+          <label class="opt"><input type="radio" name="identity" value="known"><span>닉네임만 불렸지만, 그 자리에 나를 실제로 아는 지인이 있었다</span></label>
+          <label class="opt"><input type="radio" name="identity" value="stranger"><span>닉네임만 불렸고, 처음 만난 사람들뿐이었다 (랜덤 매칭 등)</span></label>
+          <label class="opt"><input type="radio" name="identity" value="none"><span>내 이름도 닉네임도 불리지 않았다</span></label>
+        </fieldset>
+        <fieldset>
+          <legend>Q3. 어떤 상황에서 나온 말인가요?</legend>
+          <label class="opt"><input type="radio" name="context" value="oneway"><span>상대가 일방적으로 한 말</span></label>
+          <label class="opt"><input type="radio" name="context" value="fight"><span>서로 말다툼하다가 나온 말</span></label>
+          <label class="opt"><input type="radio" name="context" value="mutual"><span>내가 먼저 욕을 하기도 했다</span></label>
+        </fieldset>
+        <fieldset>
+          <legend>Q4. 몇 번이나 들었나요?</legend>
+          <label class="opt"><input type="radio" name="freq" value="once"><span>한 번</span></label>
+          <label class="opt"><input type="radio" name="freq" value="many"><span>여러 번·여러 날에 걸쳐</span></label>
         </fieldset>
       </section>
 
       <section class="field">
         <h2>③ 추가 상황 <em class="opt-tag">선택</em></h2>
         <div class="checks">
-          <label class="opt"><input type="checkbox" name="extra" value="sexual"><span>성적인 말이나 사진을 보냈어요</span></label>
-          <label class="opt"><input type="checkbox" name="extra" value="threat"><span>해치겠다, 찾아가겠다 같은 말을 했어요</span></label>
-          <label class="opt"><input type="checkbox" name="extra" value="defame"><span>나에 대한 거짓말이나 사실을 퍼뜨렸어요</span></label>
-          <label class="opt"><input type="checkbox" name="extra" value="repeat"><span>여러 번 반복되고 있어요</span></label>
+          <label class="opt"><input type="checkbox" name="extra" value="sexual" id="chkSexual"><span>성적인 말·사진을 보냈어요</span></label>
+          <div id="sexualSub" class="sub" hidden>
+            <p class="sub-q">어떤 경우인가요?</p>
+            <label class="opt"><input type="radio" name="sexualType" value="fight"><span>다툼 중 욕설에 섞인 거예요</span></label>
+            <label class="opt"><input type="radio" name="sexualType" value="unrelated"><span>다툼과 상관없이 성적인 말을 했어요</span></label>
+          </div>
+          <label class="opt"><input type="checkbox" name="extra" value="threat"><span>"찾아가겠다", "죽이겠다"처럼 해를 끼치겠다고 했어요</span></label>
+          <label class="opt"><input type="checkbox" name="extra" value="defame"><span>나에 대한 구체적인 사실이나 거짓말을 퍼뜨렸어요</span></label>
         </div>
       </section>
 
@@ -123,7 +140,7 @@
 
     <section class="rs card" id="rsCrimes"><div class="card-inner">
       <h2>🏷️ 해당 가능 죄목</h2>
-      <div id="crimes" class="tags"></div>
+      <div id="crimes"></div>
       <p id="crimeNote" class="muted"></p>
     </div></section>
 
@@ -134,6 +151,7 @@
       <ul id="checklist" class="checklist"></ul>
     </div></section>
 
+    <!-- 고소각 60° 이상: 고소장 초안 -->
     <section class="rs card" id="rsDraft"><div class="card-inner">
       <h2>📄 고소장 초안</h2>
       <div class="paper">
@@ -146,10 +164,19 @@
       </div>
     </div></section>
 
+    <!-- 고소각 60° 미만: 초안 대신 가이드 -->
+    <section class="rs card" id="rsGuide"><div class="card-inner">
+      <h2 id="guideTitle"></h2>
+      <p id="guideLead" class="muted"></p>
+      <ol id="guideSteps" class="guide-steps"></ol>
+    </div></section>
+
     <section class="rs card" id="rsClosing"><div class="card-inner">
       <p id="closingMsg" class="closing"></p>
       <h2>🤝 도움받을 곳</h2>
       <ul id="helps" class="helps"></ul>
+      <p id="resultNotice" class="notice"></p>
+      <details class="prec"><summary>참고 판례 요지</summary><ul id="precList"></ul><p id="precNote" class="muted small"></p></details>
       <button type="button" id="btnReset" class="btn ghost">다시 판독하기</button>
     </div></section>
 

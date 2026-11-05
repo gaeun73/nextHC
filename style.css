@@ -158,3 +158,23 @@ mark.threat{background:var(--red); color:#fff; box-shadow:0 0 10px rgba(255,59,9
 }
 @media (min-width:761px){ html{font-size:18px} }
 @media (prefers-reduced-motion:reduce){ *{animation:none!important; transition:none!important} }
+
+/* 추가: 하위 질문 / 판례 / 가이드 */
+.sub{margin:0 0 6px 22px; padding-left:14px; border-left:3px solid var(--pink)}
+.sub-q{margin:4px 0; color:var(--cyan); font-weight:800}
+.refs{display:block; margin-top:8px; font-size:.78rem; color:var(--sub); font-weight:600}
+.refs span{border-bottom:1px dotted var(--sub); cursor:help; margin-right:8px}
+.crime{margin:0 0 10px}
+.crime p{margin:4px 0 0}
+.tag.warn{background:linear-gradient(120deg,var(--yellow),#ffb347)}
+.guide-steps{margin:8px 0 0; padding-left:1.4rem}
+.guide-steps li{margin:10px 0}
+.guide-steps b{color:var(--cyan)}
+.notice{margin:0 0 14px; padding:8px 12px; border-left:4px solid var(--yellow); background:#15150a}
+.prec{margin:0 0 14px}
+.prec summary{color:var(--cyan); cursor:pointer}
+.prec summary::before{content:"" }
+.prec ul{padding-left:1.2rem}
+.small{font-size:.85rem}
+.sample-select{width:auto; max-width:100%; font-weight:800; color:var(--cyan); border-color:var(--cyan); cursor:pointer}
+.sample-note{margin:6px 0 8px; font-size:.82rem; color:var(--sub)}

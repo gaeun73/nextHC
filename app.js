@@ -11,6 +11,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function hash(str) { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; }
+const uniq = (a) => a.filter((x, i) => a.indexOf(x) === i);
 
 /* ---------- 사전 매칭 (겹치는 구간 병합) ---------- */
 function findHits(text) {
@@ -20,7 +21,7 @@ function findHits(text) {
     let m;
     while ((m = re.exec(text)) !== null) {
       if (m[0].length === 0) { re.lastIndex++; continue; }
-      spans.push({ s: m.index, e: m.index + m[0].length, w: d.w, c: d.c, t: m[0] });
+      spans.push({ s: m.index, e: m.index + m[0].length, g: d.g, c: d.c, t: m[0] });
     }
   });
   spans.sort((a, b) => a.s - b.s || b.e - a.e);
@@ -28,93 +29,137 @@ function findHits(text) {
   spans.forEach((sp) => {
     const last = merged[merged.length - 1];
     if (last && sp.s < last.e) {
-      if (sp.e > last.e) { last.e = sp.e; }
-      if (sp.w > last.w) { last.w = sp.w; last.c = sp.c; }
+      if (sp.e > last.e) last.e = sp.e;
+      // 협박 > 성적 > 모욕 순으로 분류 우선, 등급은 높은 쪽
+      const rank = { threat: 3, sexual: 2, insult: 1 };
+      if (rank[sp.c] > rank[last.c]) last.c = sp.c;
+      if (sp.g > last.g) last.g = sp.g;
       last.t = text.slice(last.s, last.e);
     } else merged.push({ ...sp });
   });
   return merged;
 }
 
-/* ---------- 규칙 기반 분석 (결정적) ---------- */
+/* ---------- 규칙 기반 분석 (결정적) ----------
+   input: { text, place, identity, context, freq, extras[], sexualType, info{} } */
 function analyze(input) {
   const D = DATA;
   const text = input.text || "";
   const extras = input.extras || [];
-  const info = input.info || {};
   const hits = findHits(text);
+  const many = input.freq === "many";
+  const quarrel = input.context === "fight" || input.context === "mutual";
+  const refs = { pub: [], ins: [] };
 
-  const insultW = hits.filter((h) => h.c === "insult").reduce((a, h) => a + h.w, 0);
-  const sexualDetected = hits.some((h) => h.c === "sexual") || extras.includes("sexual");
-  const threatDetected = hits.some((h) => h.c === "threat") || extras.includes("threat");
-  const defame = extras.includes("defame");
-  const repeat = extras.includes("repeat");
-
-  // 요건 판단
+  /* ── [모욕죄] 3요건 ── */
+  // 공연성
   const pubStatus = { public: "ok", group: "warn", dm: "no" }[input.place] || "no";
-  const specStatus = { direct: "ok", context: "warn", unsure: "warn" }[input.target] || "warn";
-  const insultStatus = insultW >= 2 ? "ok" : insultW === 1 ? "warn" : "no";
+  if (input.place === "dm") refs.pub.push("2020도5813", "2021도15122");
+  if (input.place === "group") refs.pub.push("2020도5813");
+  // 특정성
+  const specStatus = { real: "ok", known: "warn", stranger: "no", none: "no" }[input.identity] || "no";
+  // 모욕성: 사전 최고 등급에서 보정
+  let grade = hits.filter((h) => h.c !== "threat").reduce((m, h) => Math.max(m, h.g), 0);
+  const adjust = [];
+  const pronounRe = new RegExp(D.pronounRe);
+  const directed = input.identity !== "none" || pronounRe.test(text);
+  if (grade > 0 && !directed) { grade--; adjust.push(D.elements["모욕성"].lowerNoTarget); }
+  if (grade > 0 && quarrel && !many) {
+    grade--; adjust.push(D.elements["모욕성"].lowerQuarrel);
+    refs.ins.push("2015도2229", "2024도2131");
+  }
+  const insultStatus = grade >= 3 ? "ok" : grade === 2 ? "warn" : "no";
 
-  // 점수 (가중치 모델)
-  const insultPart = Math.min(1, insultW / 4);
-  const specPart = { direct: 1, context: 0.7, unsure: 0.4 }[input.target] ?? 0.4;
-  const pubFactor = { public: 1, group: 0.85, dm: 0.25 }[input.place] ?? 0.25;
-  let ratio = (0.6 * insultPart + 0.4 * specPart) * pubFactor;
-  if (insultW === 0) ratio = Math.min(ratio, 0.15);
-  let score = ratio * 180;
-  if (repeat) score += 15;
-  if (defame) score += 25 * pubFactor;
-  if (sexualDetected || threatDetected) score = Math.max(score, 120);
-  score = Math.max(0, Math.min(180, Math.round(score)));
-  const level = score >= 120 ? "danger" : score >= 60 ? "warn" : "safe";
-
-  // 요건 설명
-  const reasonFor = (k, st) => D.elements[k][st];
+  const specReason = specStatus === "no" ? D.elements["특정성"].no[input.identity === "none" ? "none" : "stranger"] : D.elements["특정성"][specStatus];
   const elements = {
-    "공연성": { status: pubStatus, reason: reasonFor("공연성", pubStatus) },
-    "특정성": { status: specStatus, reason: reasonFor("특정성", specStatus) },
-    "모욕성": { status: insultStatus, reason: reasonFor("모욕성", insultStatus) }
+    "공연성": { status: pubStatus, reason: D.elements["공연성"][pubStatus], refs: refs.pub.slice() },
+    "특정성": { status: specStatus, reason: specReason, refs: [] },
+    "모욕성": { status: insultStatus, reason: [D.elements["모욕성"].grade[grade]].concat(adjust).join(" "), refs: refs.ins.slice() }
   };
-  if ((sexualDetected || threatDetected) && pubStatus === "no") {
-    elements["공연성"].reason += " (이 건은 성적 표현·협박이 감지되어 별도 죄목으로 판단돼요.)";
+
+  // 모욕죄 각도: 가장 낮은 요건이 구간을 결정
+  const st = [pubStatus, specStatus, insultStatus];
+  const noCnt = st.filter((s) => s === "no").length;
+  const okCnt = st.filter((s) => s === "ok").length;
+  let insultAngle, insultStat;
+  if (noCnt > 0) { insultStat = "no"; insultAngle = Math.min(59, 10 + 15 * (3 - noCnt) + (grade > 0 ? 5 : 0)); }
+  else if (okCnt < 3) { insultStat = "warn"; insultAngle = 70 + 15 * okCnt + (many ? 5 : 0); }
+  else { insultStat = "ok"; insultAngle = 140 + (many ? 20 : 0); }
+
+  const details = [];
+  details.push({ name: "모욕죄", status: insultStat, angle: insultAngle,
+    reason: insultStat === "no" ? "3요건 중 부족한 요건이 있어 모욕죄는 어려워요." : D.crimeReason["모욕죄"][insultStat],
+    refs: uniq(refs.pub.concat(refs.ins)) });
+
+  /* ── [통신매체이용음란죄] ── */
+  const sexChecked = extras.includes("sexual");
+  const sexHit = hits.some((h) => h.c === "sexual");
+  if (sexChecked || sexHit) {
+    const type = sexChecked ? input.sexualType : (quarrel ? "fight" : "unrelated");
+    let status = (type === "unrelated" || many) ? "ok" : "warn";
+    if (!sexChecked) status = "warn"; // 직접 체크하지 않은 사전 감지는 보수적으로 애매
+    const rf = status === "ok" ? ["2023도15984"] : ["2023도17539"];
+    details.push({ name: "통신매체이용음란죄", status, angle: status === "ok" ? 130 + (many ? 20 : 0) : 90,
+      reason: D.crimeReason["통신매체이용음란죄"][status] + (!sexChecked ? " (직접 체크하지 않아 보수적으로 판단)" : ""), refs: rf });
   }
 
-  // 죄목
-  const crimes = [];
-  if (insultStatus !== "no" && pubStatus !== "no" && specStatus !== "no") crimes.push("모욕죄");
-  if (defame) crimes.push("명예훼손죄");
-  if (sexualDetected) crimes.push("통신매체이용음란죄");
-  if (threatDetected) crimes.push("협박죄");
+  /* ── [협박죄] ── */
+  const thrChecked = extras.includes("threat");
+  const thrHit = hits.some((h) => h.c === "threat");
+  if (thrChecked || thrHit) {
+    const status = thrChecked ? "ok" : "warn";
+    details.push({ name: "협박죄", status, angle: status === "ok" ? 140 + (many ? 20 : 0) : 90,
+      reason: D.crimeReason["협박죄"][status], refs: [] });
+  }
+
+  /* ── [명예훼손죄] ── */
+  if (extras.includes("defame")) {
+    const status = (pubStatus === "ok" && specStatus === "ok") ? "ok" : (pubStatus !== "no" && specStatus !== "no") ? "warn" : "no";
+    details.push({ name: "명예훼손죄", status, angle: status === "ok" ? 125 + (many ? 15 : 0) : status === "warn" ? 80 : 20,
+      reason: status === "no" ? "사실 적시는 체크했지만 공연성·특정성이 부족해 명예훼손죄는 어려워요." : D.crimeReason["명예훼손죄"][status],
+      refs: uniq(refs.pub) });
+  }
+
+  /* ── 최종: 죄목별 각도 중 최대 ── */
+  const score = Math.max(0, Math.min(180, Math.max(...details.map((d) => d.angle))));
+  const level = score >= 120 ? "danger" : score >= 60 ? "warn" : "safe";
+  const tagged = details.filter((d) => d.status !== "no");
+  const crimes = tagged.map((d) => d.name);
 
   // 경고
   const warnings = [];
-  if (threatDetected) warnings.push(D.warnings.threat);
-  if (crimes.includes("모욕죄")) warnings.push(D.warnings.insult);
-  if (sexualDetected) warnings.push(D.warnings.sexual);
+  if (thrChecked || thrHit) warnings.push(D.warnings.threat);
+  if (tagged.some((d) => d.name === "모욕죄")) warnings.push(D.warnings.insult);
+  if (tagged.some((d) => d.name === "통신매체이용음란죄")) warnings.push(D.warnings.sexual);
+  if (input.context === "mutual") warnings.push(D.warnings.countersuit);
 
-  // 하이라이트(중복 제거, 등장 순서 유지)
-  const highlights = [];
-  hits.forEach((h) => { if (!highlights.includes(h.t)) highlights.push(h.t); });
+  // 하이라이트
+  const highlights = uniq(hits.map((h) => h.t));
 
   // 총평 (입력 해시로 문구 선택 → 같은 입력엔 항상 같은 결과)
   const pool = D.summaries[level];
-  const strongest = hits.slice().sort((a, b) => b.w - a.w)[0];
+  const strongest = hits.slice().sort((a, b) => b.g - a.g)[0];
   const term = strongest ? strongest.t : "그 발언";
   const summary = pool[hash(text + level) % pool.length].replace("{term}", term);
 
   // 증거 체크리스트
   const evidence_checklist = D.evidence.slice();
-  if (threatDetected) evidence_checklist.unshift(D.evidenceExtra.threat);
-  if (sexualDetected) evidence_checklist.unshift(D.evidenceExtra.sexual);
-  if (repeat) evidence_checklist.push(D.evidenceExtra.repeat);
+  if (thrChecked || thrHit) evidence_checklist.unshift(D.evidenceExtra.threat);
+  if (sexChecked || sexHit) evidence_checklist.unshift(D.evidenceExtra.sexual);
+  if (extras.includes("defame")) evidence_checklist.push(D.evidenceExtra.defame);
+  if (many) evidence_checklist.push(D.evidenceExtra.repeat);
 
-  const result = { score, level, summary, highlights, elements, crimes, warnings, evidence_checklist, complaint_draft: "" };
-  result.complaint_draft = buildDraft(input, result, hits, text);
+  const precedents = uniq(details.filter((d) => d.status !== "no").reduce((a, d) => a.concat(d.refs), []).concat(refs.pub, refs.ins));
+
+  const result = { score, level, summary, highlights, elements, crimes, warnings, evidence_checklist,
+    complaint_draft: "", crime_details: details, precedents };
+  // 60° 미만이면 고소장 초안 대신 가이드
+  result.complaint_draft = score >= 60 ? buildDraft(input, result, text) : "";
   return result;
 }
 
 /* ---------- 고소장 초안 ---------- */
-function buildDraft(input, r, hits, text) {
+function buildDraft(input, r, text) {
   const L = DATA.labels, info = input.info || {};
   const blank = "[        ]";
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
@@ -122,10 +167,8 @@ function buildDraft(input, r, hits, text) {
   const quoteSrc = hitLines.length ? hitLines : lines.slice(0, 3);
   const quotes = quoteSrc.map((l) => '     - "' + l.trim() + '"').join("\n") || "     - [        ]";
 
-  const reasons = [];
-  if (r.elements["모욕성"].status !== "no") reasons.push("경멸적 표현으로 고소인의 사회적 평가를 저하시키는 것이고");
-  if (input.place !== "dm") reasons.push("불특정 또는 다수인이 인식할 수 있는 상태에서 이루어졌습니다.");
-  const reasonText = reasons.length ? reasons.join(" ").replace(/고$/, "고") : "[구체적 사유 기재]";
+  const tagged = r.crime_details.filter((d) => d.status !== "no").map((d) => d.name);
+  const reasonText = tagged.map((n) => DATA.draftReasons[n]).join(" ");
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
@@ -135,12 +178,12 @@ function buildDraft(input, r, hits, text) {
     nick: info.nick || blank,
     game: info.game || blank,
     date: dateStr,
-    crimes: r.crimes.length ? r.crimes.join(", ") : "모욕 등 [죄명 검토 필요]",
+    crimes: tagged.join(", "),
     placeLabel: L.place[input.place] || blank,
     quotes,
-    targetLabel: L.target[input.target] || "",
+    targetLabel: L.target[input.identity] || "",
     reasons: reasonText,
-    repeatLine: (input.extras || []).includes("repeat") ? "위와 같은 행위는 일회성이 아니라 여러 차례 반복되었습니다." : "위와 같은 행위로 고소인은 정신적 고통을 입었습니다.",
+    repeatLine: input.freq === "many" ? "위와 같은 행위는 일회성이 아니라 여러 차례 반복되었습니다." : "위와 같은 행위로 고소인은 정신적 고통을 입었습니다.",
     captureLine: info.capture === "yes" ? "보유 중" : info.capture === "no" ? "아직 확보하지 못함 (확보 후 제출 예정)" : blank,
     today: todayStr
   };
@@ -182,8 +225,11 @@ function collect() {
   return {
     text: $("text").value.trim(),
     place: radio("place"),
-    target: radio("target"),
+    identity: radio("identity"),
+    context: radio("context"),
+    freq: radio("freq"),
     extras: [...document.querySelectorAll("input[name=extra]:checked")].map((c) => c.value),
+    sexualType: radio("sexualType") || "",
     info: { game: $("infoGame").value.trim(), nick: $("infoNick").value.trim(), date: $("infoDate").value, capture: $("infoCapture").value }
   };
 }
@@ -191,6 +237,14 @@ function collect() {
 /* ---------- 렌더링 ---------- */
 const LEVEL_TXT = { safe: "각 안 나옴", warn: "애매한 각", danger: "고소각" };
 const ST_TXT = { ok: "✅ 충족", warn: "⚠️ 애매", no: "❌ 부족" };
+const CRIME_ST = { ok: "가능성 높음", warn: "애매" };
+
+function refsHtml(ids) {
+  if (!ids || !ids.length) return "";
+  const P = DATA.precedents;
+  return '<span class="refs">근거 판례: ' + ids.map((id) =>
+    `<span title="${esc(P[id] ? P[id].point : "")}">${esc(P[id] ? P[id].short : id)}</span>`).join("") + "</span>";
+}
 
 function drawTicks() {
   const g = $("ticks"); let h = "";
@@ -217,6 +271,8 @@ function renderHighlight(text, hits) {
   return out + esc(text.slice(pos));
 }
 
+function showsDraft(r) { return r.score >= 60 && !!r.complaint_draft; }
+
 function fill(r, input) {
   // 게이지
   const gauge = $("rsGauge");
@@ -235,30 +291,39 @@ function fill(r, input) {
   // 요건
   $("elements").innerHTML = ["공연성", "특정성", "모욕성"].map((k) => {
     const e = r.elements[k];
-    return `<div class="card el ${e.status}"><div class="card-inner"><h3>${k}</h3><div class="st">${ST_TXT[e.status]}</div><p>${esc(e.reason)}</p></div></div>`;
+    return `<div class="card el ${e.status}"><div class="card-inner"><h3>${k}</h3><div class="st">${ST_TXT[e.status]}</div><p>${esc(e.reason || "")}</p>${refsHtml(e.refs)}</div></div>`;
   }).join("");
 
   // 죄목
-  $("crimes").innerHTML = r.crimes.length
-    ? r.crimes.map((c) => `<span class="tag" title="${esc(DATA.crimeInfo[c] || "")}">${esc(c)}</span>`).join("")
-    : '<span class="tag none">해당 가능성 낮음</span>';
+  const tagged = (r.crime_details || r.crimes.map((c) => ({ name: c, status: "ok", reason: "", refs: [] }))).filter((d) => d.status !== "no");
+  $("crimes").innerHTML = tagged.length
+    ? tagged.map((d) => `<div class="crime"><span class="tag ${d.status}" title="${esc(DATA.crimeInfo[d.name] || "")}">${esc(d.name)} · ${CRIME_ST[d.status] || ""}</span><p>${esc(d.reason || "")}</p>${refsHtml(d.refs)}</div>`).join("")
+    : '<div class="tags"><span class="tag none">해당 가능성 낮음</span></div>';
   $("crimeNote").textContent = DATA.crimeNote;
 
   // 경고
-  $("warnings").innerHTML = r.warnings.map((w, i) =>
+  $("warnings").innerHTML = r.warnings.map((w) =>
     `<div class="banner ${w.startsWith("🚨") ? "" : "yellow"}">${esc(w)}</div>`).join("");
 
   // 체크리스트
   $("checklist").innerHTML = r.evidence_checklist.map((t) =>
     `<li><label><input type="checkbox"><span>${esc(t)}</span></label></li>`).join("");
 
-  // 고소장
-  $("draft").textContent = r.complaint_draft;
+  // 고소장 초안 또는 가이드
+  $("draft").textContent = r.complaint_draft || "";
+  const G = DATA.guide;
+  $("guideTitle").textContent = G.title;
+  $("guideLead").textContent = G.lead;
+  $("guideSteps").innerHTML = G.steps.map((s) => `<li><b>${esc(s.t)}</b><br>${esc(s.d)}</li>`).join("");
 
   // 마무리
   $("closingMsg").textContent = DATA.closing[r.level];
+  $("resultNotice").textContent = DATA.resultNotice;
   $("helps").innerHTML = DATA.helps.map((h) =>
     `<li><b>${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.name)}</a>` : esc(h.name)}</b> - ${esc(h.desc)}</li>`).join("");
+  $("precList").innerHTML = Object.keys(DATA.precedents).map((id) =>
+    `<li><b>${esc(DATA.precedents[id].short)}</b> - ${esc(DATA.precedents[id].point)}</li>`).join("");
+  $("precNote").textContent = DATA.precedentNote;
 }
 
 function countUp(el, to, ms) {
@@ -273,7 +338,7 @@ function countUp(el, to, ms) {
 async function reveal(r) {
   const ids = ["rsGauge", "rsHighlight", "rsElements", "rsCrimes"];
   if (r.warnings.length) ids.push("rsWarn");
-  ids.push("rsEvidence", "rsDraft", "rsClosing");
+  ids.push("rsEvidence", showsDraft(r) ? "rsDraft" : "rsGuide", "rsClosing");
   document.querySelectorAll(".rs").forEach((s) => s.classList.remove("show"));
   $("result").hidden = false;
   for (let i = 0; i < ids.length; i++) {
@@ -291,19 +356,34 @@ async function reveal(r) {
   }
 }
 
-/* ---------- 이벤트 ---------- */
-let running = false, lastResult = null;
+/* ---------- 예시 / 폼 ---------- */
+let running = false;
 
-function loadSample() {
-  const s = DATA.sample;
+function setRadio(name, value) {
+  document.querySelectorAll(`input[name=${name}]`).forEach((r) => { r.checked = r.value === value; });
+}
+function syncSexualSub() { $("sexualSub").hidden = !$("chkSexual").checked; }
+
+function loadSample(id) {
+  const note = $("sampleNote");
+  const s = (DATA.samples || []).find((x) => x.id === id);
+  if (!s) { note.hidden = true; return; }
   $("text").value = s.text;
-  document.querySelector(`input[name=place][value=${s.place}]`).checked = true;
-  document.querySelector(`input[name=target][value=${s.target}]`).checked = true;
+  setRadio("place", s.place); setRadio("identity", s.identity);
+  setRadio("context", s.context); setRadio("freq", s.freq);
   document.querySelectorAll("input[name=extra]").forEach((c) => { c.checked = s.extras.includes(c.value); });
-  $("infoGame").value = s.info.game; $("infoNick").value = s.info.nick;
-  $("infoDate").value = s.info.date; $("infoCapture").value = s.info.capture;
-  $("infoBox").open = true;
+  syncSexualSub();
+  setRadio("sexualType", s.sexualType || "");
+  note.textContent = s.result; note.hidden = false;
   $("err").hidden = true;
+}
+
+async function runInput(input) {
+  const [r] = await Promise.all([getResult(input), sleep(1500)]);
+  fill(r, input);
+  $("scan").hidden = true;
+  await reveal(r);
+  return r;
 }
 
 async function onSubmit(e) {
@@ -312,8 +392,11 @@ async function onSubmit(e) {
   const input = collect();
   const miss = [];
   if (!input.text) miss.push("대화 내용");
-  if (!input.place) miss.push("Q1(어디서 들은 말인지)");
-  if (!input.target) miss.push("Q2(나를 향한 말인지)");
+  if (!input.place) miss.push("Q1");
+  if (!input.identity) miss.push("Q2");
+  if (!input.context) miss.push("Q3");
+  if (!input.freq) miss.push("Q4");
+  if (input.extras.includes("sexual") && !input.sexualType) miss.push("성적인 말 하위 질문");
   const err = $("err");
   if (miss.length) {
     err.textContent = "먼저 입력해 주세요: " + miss.join(", ");
@@ -326,11 +409,7 @@ async function onSubmit(e) {
   $("scan").hidden = false;
   $("scan").scrollIntoView({ behavior: "smooth", block: "center" });
   try {
-    const [r] = await Promise.all([getResult(input), sleep(1500)]);
-    lastResult = r;
-    fill(r, input);
-    $("scan").hidden = true;
-    await reveal(r);
+    await runInput(input);
   } catch (ex) {
     console.error(ex);
     $("scan").hidden = true;
@@ -365,7 +444,11 @@ function downloadDraft() {
 document.addEventListener("DOMContentLoaded", () => {
   drawTicks();
   $("disclaimer").textContent = DATA.disclaimer;
-  $("btnSample").addEventListener("click", loadSample);
+  const sel = $("sampleSelect");
+  sel.innerHTML = '<option value="">예시 불러오기 ▾</option>' +
+    DATA.samples.map((s) => `<option value="${esc(s.id)}">${esc(s.label)}</option>`).join("");
+  sel.addEventListener("change", () => loadSample(sel.value));
+  $("chkSexual").addEventListener("change", syncSexualSub);
   $("form").addEventListener("submit", onSubmit);
   $("btnCopy").addEventListener("click", copyDraft);
   $("btnDown").addEventListener("click", downloadDraft);
