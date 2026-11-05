@@ -51,8 +51,36 @@ async function saveJudgment(input, r) {
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     console.info("Supabase: 익명 통계 저장 완료");
+    loadStats();
   } catch (e) {
     console.warn("Supabase 저장 실패(무시):", e);
+  }
+}
+
+// 집계 함수(rpc)로 통계를 읽어 카드에 표시. 실패하거나 0건이면 카드는 숨김
+async function loadStats() {
+  try {
+    const res = await sb("rpc/judgment_stats", { method: "POST", body: "{}" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const s = await res.json();
+    if (!s || !s.total) return;
+    const pct = (n) => (n / s.total * 100).toFixed(1) + "%";
+    $("stTotal").textContent = s.total;
+    $("stAvg").textContent = s.avg_score + "°";
+    ["Safe", "Warn", "Danger"].forEach((k) => {
+      const n = s[k.toLowerCase()];
+      $("st" + k).style.width = pct(n);
+      $("st" + k + "N").textContent = n;
+    });
+    const list = Object.entries(s.crimes || {}).sort((a, b) => b[1] - a[1]);
+    const max = list.length ? list[0][1] : 1;
+    $("stCrimes").innerHTML = list.length
+      ? list.map(([name, n]) => `<li><span class="nm">${esc(name)}</span><span class="bar"><i style="width:${(n / max * 100).toFixed(0)}%"></i></span><span class="n">${n}</span></li>`).join("")
+      : '<li class="muted">아직 해당 죄목이 없어요</li>';
+    $("stats").hidden = false;
+    console.info("Supabase: 통계 " + s.total + "건 로드");
+  } catch (e) {
+    console.warn("Supabase 통계 로드 실패(무시):", e);
   }
 }
 
@@ -64,9 +92,14 @@ function hash(str) { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31
 const uniq = (a) => a.filter((x, i) => a.indexOf(x) === i);
 
 /* ---------- 사전 매칭 (겹치는 구간 병합) ---------- */
+// 글자 사이에 공백·기호가 끼어 있어도 매칭하는 정규식 문자열 (예: 병신 → 병[\s.\-_~*·]{0,2}신)
+const LOOSE_GAP = "[\\s.\\-_~*·,/]{0,2}";
+function looseRe(word) { return Array.from(word).join(LOOSE_GAP); }
+
 function findHits(text) {
   const spans = [];
-  DATA.dict.forEach((d) => {
+  const entries = DATA.dict.concat((DATA.loose || []).map((l) => ({ re: looseRe(l.w), g: l.g, c: l.c })));
+  entries.forEach((d) => {
     const re = new RegExp(d.re, "g");
     let m;
     while ((m = re.exec(text)) !== null) {
@@ -494,6 +527,7 @@ function downloadDraft() {
 
 document.addEventListener("DOMContentLoaded", () => {
   loadPrecedents();
+  loadStats();
   drawTicks();
   $("disclaimer").textContent = DATA.disclaimer;
   const sel = $("sampleSelect");

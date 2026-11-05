@@ -181,6 +181,21 @@
     </div></section>
 
   </div>
+  <!-- ===== 통계 (Supabase 집계) ===== -->
+  <section class="card" id="stats" hidden><div class="card-inner">
+    <h2>📊 지금까지의 판독 통계</h2>
+    <div class="stat-top">
+      <div class="stat-box"><b id="stTotal">0</b><span>누적 판독</span></div>
+      <div class="stat-box"><b id="stAvg">0°</b><span>평균 고소각</span></div>
+    </div>
+    <div class="stat-bar" aria-label="단계별 비율">
+      <i id="stSafe" class="s-safe"></i><i id="stWarn" class="s-warn"></i><i id="stDanger" class="s-danger"></i>
+    </div>
+    <p class="stat-legend"><span class="s-safe">각 안 나옴 <b id="stSafeN">0</b></span> · <span class="s-warn">애매한 각 <b id="stWarnN">0</b></span> · <span class="s-danger">고소각 <b id="stDangerN">0</b></span></p>
+    <h3 class="stat-sub">많이 나온 죄목</h3>
+    <ul id="stCrimes" class="stat-crimes"></ul>
+    <p class="muted small">대화 내용은 저장하지 않고, 판독 결과의 익명 숫자만 집계해요.</p>
+  </div></section>
 </main>
 
 <footer class="footer">

@@ -178,3 +178,23 @@ mark.threat{background:var(--red); color:#fff; box-shadow:0 0 10px rgba(255,59,9
 .small{font-size:.85rem}
 .sample-select{width:auto; max-width:100%; font-weight:800; color:var(--cyan); border-color:var(--cyan); cursor:pointer}
 .sample-note{margin:6px 0 8px; font-size:.82rem; color:var(--sub)}
+
+/* ---------- 통계 카드 ---------- */
+.stat-top{display:flex; gap:12px; margin:8px 0 14px}
+.stat-box{flex:1; background:var(--panel); border:1px solid rgba(0,240,255,.25); border-radius:10px; padding:12px; text-align:center}
+.stat-box b{display:block; font-size:1.8rem; color:var(--cyan)}
+.stat-box span{color:var(--sub); font-size:.85rem}
+.stat-bar{display:flex; height:14px; border-radius:7px; overflow:hidden; background:#222}
+.stat-bar i{display:block; height:100%; transition:width .6s}
+.s-safe{background:var(--green)} .s-warn{background:var(--yellow)} .s-danger{background:var(--red)}
+.stat-legend{margin:8px 0 14px; font-size:.9rem; color:var(--sub)}
+.stat-legend span{background:none}
+.stat-legend .s-safe{color:var(--green)} .stat-legend .s-warn{color:var(--yellow)} .stat-legend .s-danger{color:var(--red)}
+.stat-sub{margin:6px 0; font-size:1rem}
+.stat-crimes{list-style:none; margin:0 0 12px; padding:0}
+.stat-crimes li{display:flex; align-items:center; gap:10px; margin:6px 0; font-size:.92rem}
+.stat-crimes .nm{width:9.5em; flex:none}
+.stat-crimes .bar{flex:1; background:#222; border-radius:5px; height:10px; overflow:hidden}
+.stat-crimes .bar i{display:block; height:100%; background:linear-gradient(90deg,var(--cyan),var(--pink))}
+.stat-crimes .n{width:2.5em; text-align:right; color:var(--sub)}
+@media (max-width:640px){ .stat-crimes .nm{width:7em} }
