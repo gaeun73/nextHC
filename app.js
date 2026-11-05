@@ -3,8 +3,58 @@
    ============================================================ */
 const CONFIG = {
   API_URL: "",          // 예: "https://example.com/api/analyze" (비어 있으면 규칙 기반만 사용)
-  API_TIMEOUT_MS: 10000
+  API_TIMEOUT_MS: 10000,
+  // Supabase (공개용 publishable 키만 사용. secret/service_role 키는 절대 넣지 말 것)
+  SUPABASE_URL: "https://rpwniabqaszrjllgjxiq.supabase.co",
+  SUPABASE_KEY: "sb_publishable_4PQMtdcwHG8RmNizYbaPng_Dc87eM8u"
 };
+
+/* ---------- Supabase (REST, 라이브러리 없이 fetch 사용) ---------- */
+function sb(path, opts) {
+  return fetch(CONFIG.SUPABASE_URL + "/rest/v1/" + path, Object.assign({}, opts, {
+    headers: Object.assign({
+      apikey: CONFIG.SUPABASE_KEY,
+      Authorization: "Bearer " + CONFIG.SUPABASE_KEY,
+      "Content-Type": "application/json"
+    }, (opts && opts.headers) || {})
+  }));
+}
+
+// 판례를 DB에서 읽어 와서 data.js 값을 덮어씀 (실패하면 data.js 값을 그대로 사용)
+async function loadPrecedents() {
+  try {
+    const res = await sb("precedents?select=id,short,point");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) return false;
+    const p = {};
+    rows.forEach((r) => { p[r.id] = { short: r.short, point: r.point }; });
+    DATA.precedents = p;
+    console.info("Supabase: 판례 " + rows.length + "건 로드");
+    return true;
+  } catch (e) {
+    console.warn("Supabase 판례 로드 실패, data.js 사용:", e);
+    return false;
+  }
+}
+
+// 판독 결과의 익명 통계만 저장 (대화 원문·닉네임·날짜는 보내지 않음)
+async function saveJudgment(input, r) {
+  try {
+    const res = await sb("judgments", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        score: r.score, level: r.level, crimes: r.crimes || [],
+        place: input.place, identity: input.identity, context: input.context, freq: input.freq
+      })
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    console.info("Supabase: 익명 통계 저장 완료");
+  } catch (e) {
+    console.warn("Supabase 저장 실패(무시):", e);
+  }
+}
 
 /* ---------- 유틸 ---------- */
 const $ = (id) => document.getElementById(id);
@@ -381,6 +431,7 @@ function loadSample(id) {
 async function runInput(input) {
   const [r] = await Promise.all([getResult(input), sleep(1500)]);
   fill(r, input);
+  saveJudgment(input, r);
   $("scan").hidden = true;
   await reveal(r);
   return r;
@@ -442,6 +493,7 @@ function downloadDraft() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  loadPrecedents();
   drawTicks();
   $("disclaimer").textContent = DATA.disclaimer;
   const sel = $("sampleSelect");
