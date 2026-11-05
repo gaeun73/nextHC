@@ -198,3 +198,14 @@ mark.threat{background:var(--red); color:#fff; box-shadow:0 0 10px rgba(255,59,9
 .stat-crimes .bar i{display:block; height:100%; background:linear-gradient(90deg,var(--cyan),var(--pink))}
 .stat-crimes .n{width:2.5em; text-align:right; color:var(--sub)}
 @media (max-width:640px){ .stat-crimes .nm{width:7em} }
+
+/* ---------- 상단 배너 (게이지 이미지 위에 제목) ---------- */
+.hero{
+  max-width:1040px; margin:12px auto 0; min-height:230px;
+  display:flex; flex-direction:column; justify-content:flex-end; align-items:center;
+  padding:24px 16px 6%;
+  background:url("assets/akpeul_gauge.png") center bottom / cover no-repeat;
+  border-radius:14px; box-shadow:0 0 28px rgba(255,43,214,.25);
+}
+.hero .tagline{text-shadow:0 0 8px #000}
+@media (min-width:700px){ .hero{min-height:420px} }
