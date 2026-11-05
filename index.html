@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>악플각도기 - 고소각 판독기</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<header class="hero">
+  <h1 class="glitch" data-text="악플각도기">악플각도기</h1>
+  <p class="tagline">악플 받았나요? 붙여넣으면 <b>고소각</b>을 재드릴게요.</p>
+</header>
+
+<main class="wrap">
+
+  <!-- ===== 입력 ===== -->
+  <form id="form" class="card" autocomplete="off" novalidate>
+    <div class="card-inner">
+
+      <section class="field">
+        <div class="label-row">
+          <h2>① 대화 내용 <em class="req">필수</em></h2>
+          <button type="button" id="btnSample" class="btn ghost">예시 불러오기</button>
+        </div>
+        <textarea id="text" rows="7" placeholder="상대방이 보낸 말을 그대로 붙여넣어 주세요"></textarea>
+      </section>
+
+      <section class="field">
+        <h2>② 상황 체크 <em class="req">필수</em></h2>
+        <fieldset>
+          <legend>Q1. 어디서 들은 말인가요?</legend>
+          <label class="opt"><input type="radio" name="place" value="public"><span>공개 채팅·게시글·댓글</span></label>
+          <label class="opt"><input type="radio" name="place" value="group"><span>파티·단톡 등 소수가 있는 채팅</span></label>
+          <label class="opt"><input type="radio" name="place" value="dm"><span>1:1 귓속말·DM</span></label>
+        </fieldset>
+        <fieldset>
+          <legend>Q2. 그 말이 나를 향한 거라는 걸 다른 사람도 알 수 있었나요?</legend>
+          <label class="opt"><input type="radio" name="target" value="direct"><span>내 닉네임이나 이름을 직접 불렀다</span></label>
+          <label class="opt"><input type="radio" name="target" value="context"><span>대화 흐름상 나라는 걸 알 수 있었다</span></label>
+          <label class="opt"><input type="radio" name="target" value="unsure"><span>잘 모르겠다</span></label>
+        </fieldset>
+      </section>
+
+      <section class="field">
+        <h2>③ 추가 상황 <em class="opt-tag">선택</em></h2>
+        <div class="checks">
+          <label class="opt"><input type="checkbox" name="extra" value="sexual"><span>성적인 말이나 사진을 보냈어요</span></label>
+          <label class="opt"><input type="checkbox" name="extra" value="threat"><span>해치겠다, 찾아가겠다 같은 말을 했어요</span></label>
+          <label class="opt"><input type="checkbox" name="extra" value="defame"><span>나에 대한 거짓말이나 사실을 퍼뜨렸어요</span></label>
+          <label class="opt"><input type="checkbox" name="extra" value="repeat"><span>여러 번 반복되고 있어요</span></label>
+        </div>
+      </section>
+
+      <details class="field" id="infoBox">
+        <summary><h2>④ 고소장 초안용 정보 <em class="opt-tag">선택 · 눌러서 펼치기</em></h2></summary>
+        <div class="info-grid">
+          <label>게임·커뮤니티 이름<input id="infoGame" type="text" placeholder="예: ○○온라인"></label>
+          <label>상대 닉네임<input id="infoNick" type="text" placeholder="예: 악플러123"></label>
+          <label>발생 날짜<input id="infoDate" type="date"></label>
+          <label>캡처 보유 여부
+            <select id="infoCapture">
+              <option value="">선택 안 함</option>
+              <option value="yes">있음</option>
+              <option value="no">아직 없음</option>
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <p id="err" class="err" role="alert" hidden></p>
+      <button type="submit" id="btnRun" class="btn primary big">판독하기</button>
+      <p class="privacy">🔒 입력한 내용은 서버에 저장되지 않아요</p>
+    </div>
+  </form>
+
+  <!-- ===== 스캔 연출 ===== -->
+  <div id="scan" class="scan" hidden>
+    <div class="scan-box">
+      <div class="scan-bar"></div>
+      <p>스캔 중<span class="dots"></span></p>
+    </div>
+  </div>
+
+  <!-- ===== 결과 ===== -->
+  <div id="result" hidden>
+
+    <section class="rs card" id="rsGauge"><div class="card-inner gauge-wrap">
+      <div class="gauge-left">
+        <svg id="gauge" viewBox="0 0 300 175" aria-label="고소각 게이지">
+          <defs>
+            <linearGradient id="gGrad" gradientUnits="userSpaceOnUse" x1="30" y1="0" x2="270" y2="0">
+              <stop offset="0" stop-color="#2dff8a"/>
+              <stop offset="0.5" stop-color="#ffe84a"/>
+              <stop offset="1" stop-color="#ff3b5c"/>
+            </linearGradient>
+          </defs>
+          <path d="M 30 150 A 120 120 0 0 1 270 150" fill="none" stroke="url(#gGrad)" stroke-width="16" stroke-linecap="round"/>
+          <g id="ticks"></g>
+          <g id="needle" class="needle"><line x1="150" y1="150" x2="92" y2="150" stroke="#fff" stroke-width="5" stroke-linecap="round"/></g>
+          <circle cx="150" cy="150" r="10" fill="#0a0a0f" stroke="#fff" stroke-width="4"/>
+        </svg>
+      </div>
+      <div class="gauge-right">
+        <div class="score-line">고소각 <span id="scoreNum">0</span>°</div>
+        <div id="levelBadge" class="badge">-</div>
+        <p id="summary" class="summary"></p>
+      </div>
+    </div></section>
+
+    <section class="rs card" id="rsHighlight"><div class="card-inner">
+      <h2>🖍️ 문제 발언 하이라이트</h2>
+      <div id="hlText" class="hl-text"></div>
+      <p id="hlEmpty" class="muted" hidden>사전에서 감지된 문제 표현이 없어요.</p>
+    </div></section>
+
+    <section class="rs" id="rsElements">
+      <h2 class="sec-title">⚖️ 모욕죄 3대 요건</h2>
+      <div id="elements" class="elements"></div>
+    </section>
+
+    <section class="rs card" id="rsCrimes"><div class="card-inner">
+      <h2>🏷️ 해당 가능 죄목</h2>
+      <div id="crimes" class="tags"></div>
+      <p id="crimeNote" class="muted"></p>
+    </div></section>
+
+    <section class="rs" id="rsWarn"><div id="warnings"></div></section>
+
+    <section class="rs card" id="rsEvidence"><div class="card-inner">
+      <h2>📸 증거 수집 체크리스트</h2>
+      <ul id="checklist" class="checklist"></ul>
+    </div></section>
+
+    <section class="rs card" id="rsDraft"><div class="card-inner">
+      <h2>📄 고소장 초안</h2>
+      <div class="paper">
+        <p class="paper-warn">⚠️ AI가 작성한 초안이며 법률 자문이 아닙니다. 제출 전 꼭 확인하세요</p>
+        <pre id="draft"></pre>
+      </div>
+      <div class="btn-row">
+        <button type="button" id="btnCopy" class="btn primary">복사</button>
+        <button type="button" id="btnDown" class="btn ghost">txt 다운로드</button>
+      </div>
+    </div></section>
+
+    <section class="rs card" id="rsClosing"><div class="card-inner">
+      <p id="closingMsg" class="closing"></p>
+      <h2>🤝 도움받을 곳</h2>
+      <ul id="helps" class="helps"></ul>
+      <button type="button" id="btnReset" class="btn ghost">다시 판독하기</button>
+    </div></section>
+
+  </div>
+</main>
+
+<footer class="footer">
+  <p id="disclaimer"></p>
+</footer>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
